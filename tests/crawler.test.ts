@@ -11,7 +11,7 @@ describe('discoverProductUrls', () => {
         '/static/laptops',
         '/static/product/1',
         '/about',
-        '/static-archive/product/9',
+        '/static-archive/laptops',
         'https://other.test/x',
       ),
       [`${ROOT}/laptops`]: links(
@@ -32,6 +32,36 @@ describe('discoverProductUrls', () => {
     expect(site.calls.sort()).toEqual([ROOT, `${ROOT}/laptops`, `${ROOT}/laptops?page=2`]);
   });
 
+  it('treats a trailing slash on the start URL as the same page', async () => {
+    const site = fakeSite({
+      [ROOT]: links('/static', '/static/', '/static/product/1'),
+    });
+
+    const { productUrls, listingPages } = await discoverProductUrls({
+      startUrl: `${ROOT}/`,
+      fetchText: site,
+    });
+
+    expect(productUrls).toEqual([`${ROOT}/product/1`]);
+    expect(listingPages).toBe(1);
+    expect(site.calls).toEqual([ROOT]);
+  });
+
+  it('collects product links beside the start path, so a category page works as a start', async () => {
+    const site = fakeSite({
+      [`${ROOT}/phones`]: links('/static/product/7', '/static/laptops', '/static/phones?page=2'),
+      [`${ROOT}/phones?page=2`]: links('/static/product/8'),
+    });
+
+    const { productUrls, listingPages } = await discoverProductUrls({
+      startUrl: `${ROOT}/phones`,
+      fetchText: site,
+    });
+
+    expect(productUrls).toEqual([`${ROOT}/product/7`, `${ROOT}/product/8`]);
+    expect(listingPages).toBe(2); // /static/laptops is a sibling, not under /static/phones
+  });
+
   it('fails loudly when a listing page cannot be fetched', async () => {
     const site = fakeSite({ [ROOT]: links('/static/missing') });
     await expect(discoverProductUrls({ startUrl: ROOT, fetchText: site })).rejects.toThrow(/404/);
@@ -39,8 +69,8 @@ describe('discoverProductUrls', () => {
 });
 
 describe('extractLinks', () => {
-  it('resolves relative hrefs, strips hashes and dedupes', () => {
-    const html = links('/a', 'a', '/a#x', 'javascript:void(0)');
+  it('resolves relative hrefs, strips hashes and trailing slashes, and dedupes', () => {
+    const html = links('/a', 'a', '/a#x', '/a/', 'javascript:void(0)');
     expect(extractLinks(html, 'https://shop.test/dir/page')).toEqual([
       'https://shop.test/a',
       'https://shop.test/dir/a',

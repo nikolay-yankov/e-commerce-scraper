@@ -3,7 +3,7 @@
  * Process entrypoint. Everything testable lives in main.ts; this file only maps the
  * result onto the process: exit code, fatal-error line, and pipe behaviour.
  */
-import { errorMessage, main, ShutdownError } from './main.js';
+import { errorMessage, main } from './main.js';
 
 // `cli | head` closes our stdout early. That's the reader's choice, not an error.
 process.stdout.on('error', (err: NodeJS.ErrnoException) => {
@@ -18,6 +18,7 @@ main(process.argv.slice(2))
     process.exitCode = code;
   })
   .catch((err: unknown) => {
-    console.error(`fatal: ${errorMessage(err)}`);
-    process.exitCode = err instanceof ShutdownError ? err.exitCode : 1;
+    // Only option errors reach here; anything later is logged inside main().
+    console.error(`error ${errorMessage(err)}\n\nRun with --help for usage.`);
+    process.exitCode = 1;
   });

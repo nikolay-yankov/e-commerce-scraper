@@ -31,7 +31,7 @@ Exit codes: 0 success, 1 fatal error, 2 completed with some product pages failed
 
 /** parseArgs only knows strings and booleans; zod turns them into validated, typed options. */
 const OptionsSchema = z.object({
-  url: z.url(),
+  url: z.url({ protocol: /^https?$/ }),
   concurrency: z.coerce.number().int().min(1),
   delay: z.coerce.number().int().min(0),
   'max-pages': z.coerce.number().int().min(1),

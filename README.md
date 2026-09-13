@@ -107,16 +107,18 @@ ProductPage  { name, description, price, hddOptions: string[], colors: string[] 
                    └─ report ─▶ Report  { results: Product[], total }                 the CLI's output
 ```
 
-| Module                             | Responsibility                                                                                                                                                                                      |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`src/cli.ts`](src/cli.ts)         | Argument parsing, wiring, exit codes. JSON goes to stdout, logs to stderr, so output can be piped.                                                                                                  |
-| [`src/fetcher.ts`](src/fetcher.ts) | `fetch` with a timeout, exponential-backoff retries on 5xx/429/network errors, and a polite User-Agent. Injectable, so tests never touch the network.                                               |
-| [`src/crawler.ts`](src/crawler.ts) | Breadth-first crawl of every page under the start URL's path. Collects unique `/product/N` links; listing pages are fetched exactly once. No category names are hard-coded.                         |
-| [`src/parser.ts`](src/parser.ts)   | HTML → `ProductPage`. The **only** file that knows the site's markup; uses the page's `schema.org` microdata (`itemprop="name"`, `itemprop="price"`, …), which is more stable than CSS class names. |
-| [`src/expand.ts`](src/expand.ts)   | `ProductPage` → `Product[]`. One product per available HDD option; `colors` only when there is more than one.                                                                                       |
-| [`src/report.ts`](src/report.ts)   | Builds `{ results, total }`. Totals are summed in integer cents to avoid floating-point drift.                                                                                                      |
-| [`src/schema.ts`](src/schema.ts)   | Zod schemas — one definition gives both TypeScript types and runtime validation of parsed data and final output.                                                                                    |
-| [`src/scrape.ts`](src/scrape.ts)   | Composes the above into one `scrape()` call used by both the CLI and the e2e test.                                                                                                                  |
+| Module                             | Responsibility                                                                                                                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`src/cli.ts`](src/cli.ts)         | Process entrypoint only: maps `main()`'s result onto the process, handles `EPIPE`.                                                                                                                      |
+| [`src/main.ts`](src/main.ts)       | Wiring: logger, fetcher, signal handling, output, summary, fatal-error mapping. `fetch`/stdout/stderr are injectable so the whole CLI is tested without a network. JSON goes to stdout, logs to stderr. |
+| [`src/options.ts`](src/options.ts) | Flags, defaults and help text in one place; `util.parseArgs` + a zod schema validate and type them.                                                                                                     |
+| [`src/fetcher.ts`](src/fetcher.ts) | `fetch` with a timeout, exponential-backoff retries on 5xx/429/network errors, and a polite User-Agent. Injectable, so tests never touch the network.                                                   |
+| [`src/crawler.ts`](src/crawler.ts) | Breadth-first crawl of every page under the start URL's path. Collects unique `/product/N` links; listing pages are fetched exactly once. No category names are hard-coded.                             |
+| [`src/parser.ts`](src/parser.ts)   | HTML → `ProductPage`. The **only** file that knows the site's markup; uses the page's `schema.org` microdata (`itemprop="name"`, `itemprop="price"`, …), which is more stable than CSS class names.     |
+| [`src/expand.ts`](src/expand.ts)   | `ProductPage` → `Product[]`. One product per available HDD option; `colors` only when there is more than one.                                                                                           |
+| [`src/report.ts`](src/report.ts)   | Builds `{ results, total }`. Totals are summed in integer cents to avoid floating-point drift.                                                                                                          |
+| [`src/schema.ts`](src/schema.ts)   | Zod schemas — one definition gives both TypeScript types and runtime validation of parsed data and final output.                                                                                        |
+| [`src/scrape.ts`](src/scrape.ts)   | Composes the above into one `scrape()` call used by both the CLI and the e2e test.                                                                                                                      |
 
 ### Design decisions
 
@@ -182,22 +184,22 @@ contents: read`) and cancels superseded runs.
 
 ### Try to break it
 
-Every test name is a sentence (`npx vitest run --reporter=verbose` lists all 49). For hands-on
+Every test name is a sentence (`npx vitest run --reporter=verbose --exclude tests/e2e.test.ts` lists them all). For hands-on
 poking, these are the scenarios the tests encode, runnable against the built CLI:
 
-| Try                                                                               | Expect                                                                                                         |
-| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `npm start -- \| head -3`                                                         | Three lines, exit 0 — closing the pipe early is not an error.                                                  |
-| `npm start -- --max-pages 5`                                                      | `fatal: Crawl would exceed 5 listing pages`, exit 1, no product fetched.                                       |
-| `npm start -- --url https://nonexistent.invalid/`                                 | Three `warn retrying … ENOTFOUND` lines, then fatal with the cause, exit 1.                                    |
-| `npm start -- --url https://webscraper.io/test-sites/e-commerce/static/product/1` | `No products scraped (0 page(s) failed); has the site changed?`, exit 1 — a product page has no product links. |
-| `npm start -- -c 0 --delay abc --log-format xml`                                  | All three problems listed in one error, exit 1.                                                                |
-| `npm start -- -o /nonexistent/out.json`                                           | `ENOENT` before any request is made.                                                                           |
-| `npm start -- --url .../static/` (trailing slash)                                 | Same 423 results — scope handling is path-segment aware.                                                       |
-| Ctrl-C mid-run                                                                    | `warn shutting down signal=SIGINT`, exit 130, no partial output, no stray retry lines.                         |
-| `docker stop <container>`                                                         | Same via SIGTERM, exit 143, returns in well under a second.                                                    |
-| `npm start -- -c 20`                                                              | Same total; concurrency changes only speed.                                                                    |
-| `npm start -- --log-format json -q 2>&1 >/dev/null`                               | Nothing — quiet suppresses `info`; add a bad `--url` to see a JSON error line.                                 |
+| Try                                                                               | Expect                                                                                                                        |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `npm start -- \| head -3`                                                         | Three lines, exit 0 — closing the pipe early is not an error.                                                                 |
+| `npm start -- --max-pages 5`                                                      | `fatal: Crawl would exceed 5 listing pages`, exit 1, no product fetched.                                                      |
+| `npm start -- --url https://nonexistent.invalid/`                                 | Three `warn retrying … ENOTFOUND` lines, then fatal with the cause, exit 1.                                                   |
+| `npm start -- --url https://webscraper.io/test-sites/e-commerce/static/product/1` | `fatal reason="No products scraped (0 page(s) failed); has the site changed?"`, exit 1 — a product page links to no products. |
+| `npm start -- -c 0 --delay abc --log-format xml`                                  | All three problems listed in one error, exit 1.                                                                               |
+| `npm start -- -o /nonexistent/out.json`                                           | `ENOENT` before any request is made.                                                                                          |
+| `npm start -- --url .../static/` (trailing slash)                                 | Same 423 results — scope handling is path-segment aware.                                                                      |
+| Ctrl-C mid-run                                                                    | `warn shutting down signal=SIGINT`, exit 130, no partial output, no stray retry lines.                                        |
+| `docker stop <container>`                                                         | Same via SIGTERM, exit 143, returns in well under a second.                                                                   |
+| `npm start -- -c 20`                                                              | Same total; concurrency changes only speed.                                                                                   |
+| `npm start -- --log-format json -q 2>&1 >/dev/null`                               | Nothing — quiet suppresses `info`; add a bad `--url` to see a JSON error line.                                                |
 
 ## When things go wrong
 

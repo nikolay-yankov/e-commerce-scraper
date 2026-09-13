@@ -14,7 +14,7 @@ export interface MainIO {
 }
 
 /** Raised on SIGINT/SIGTERM; carries the conventional 128 + signal-number exit code. */
-export class ShutdownError extends Error {
+class ShutdownError extends Error {
   readonly exitCode: number;
   constructor(signal: 'SIGINT' | 'SIGTERM') {
     super(`received ${signal}`);
@@ -22,7 +22,10 @@ export class ShutdownError extends Error {
   }
 }
 
-/** Runs the CLI and resolves to its exit code. Throws for fatal errors (the entrypoint maps those). */
+/**
+ * Runs the CLI and resolves to its exit code. Only option errors throw (there is no logger yet);
+ * everything after that, including fatal errors, is logged and mapped to an exit code here.
+ */
 export async function main(
   argv: string[],
   { fetch = globalThis.fetch, stdout = process.stdout, stderr = process.stderr }: MainIO = {},
@@ -84,6 +87,9 @@ export async function main(
       ...(options.output && { output: options.output }),
     });
     return failures.length > 0 ? 2 : 0;
+  } catch (err) {
+    logger.error('fatal', { reason: errorMessage(err) });
+    return err instanceof ShutdownError ? err.exitCode : 1;
   } finally {
     process.off('SIGINT', onSignal).off('SIGTERM', onSignal);
   }

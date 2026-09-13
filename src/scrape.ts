@@ -55,6 +55,7 @@ export async function scrape({
   const settled = await Promise.allSettled(
     productUrls.map((url) =>
       limit(async () => {
+        signal?.throwIfAborted(); // queued tasks still run after an abort; skip them quietly
         logger.debug('product page', { url });
         return expandVariants(parseProductPage(await fetchText(url, signal)));
       }),

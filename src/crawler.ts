@@ -25,6 +25,8 @@ const PRODUCT_PATH = /\/product\/\d+$/;
 /**
  * Breadth-first crawl of every listing page reachable from `startUrl` that stays under
  * its path (categories, sub-categories, `?page=N`), collecting the unique product URLs.
+ * Listing pages must be under the start path; product links only need the same origin, so
+ * starting from a category page works.
  *
  * Product pages themselves are not fetched here — that is the caller's job — so the crawl
  * touches each listing page exactly once regardless of how many products link back to it.
@@ -37,7 +39,7 @@ export async function discoverProductUrls({
   maxPages = Infinity,
   onPage,
 }: CrawlOptions): Promise<CrawlResult> {
-  const root = new URL(startUrl);
+  const root = new URL(canonical(new URL(startUrl)));
   const limit = pLimit(concurrency);
   const visited = new Set<string>([root.href]);
   const products = new Set<string>();
@@ -59,10 +61,11 @@ export async function discoverProductUrls({
 
     frontier = [];
     for (const href of pages.flat()) {
-      if (!isInScope(href, root)) continue;
-      if (PRODUCT_PATH.test(new URL(href).pathname)) {
-        products.add(href);
-      } else if (!visited.has(href)) {
+      const url = new URL(href);
+      if (url.origin !== root.origin) continue;
+      if (PRODUCT_PATH.test(url.pathname)) {
+        products.add(href); // products may live beside the start path, e.g. /static/product/N
+      } else if (isUnder(url, root) && !visited.has(href)) {
         visited.add(href);
         frontier.push(href);
       }
@@ -72,15 +75,13 @@ export async function discoverProductUrls({
   return { productUrls: [...products].sort(), listingPages: visited.size };
 }
 
-/** Absolute, hash-free hrefs from every anchor on the page. Relative links are resolved. */
+/** Canonical absolute hrefs from every anchor on the page. Relative links are resolved. */
 export function extractLinks(html: string, baseUrl: string): string[] {
   const $ = cheerio.load(html);
   const links = new Set<string>();
   $('a[href]').each((_, el) => {
     try {
-      const url = new URL(el.attribs['href'] ?? '', baseUrl);
-      url.hash = '';
-      links.add(url.href);
+      links.add(canonical(new URL(el.attribs['href'] ?? '', baseUrl)));
     } catch {
       // Not a valid URL at all — ignore. (Off-site links parse fine; isInScope drops them.)
     }
@@ -88,12 +89,14 @@ export function extractLinks(html: string, baseUrl: string): string[] {
   return [...links];
 }
 
-/** Same origin, and the path is the root path or a descendant of it (not merely a prefix match). */
-function isInScope(href: string, root: URL): boolean {
-  const url = new URL(href);
-  const rootPath = root.pathname.replace(/\/$/, '');
-  return (
-    url.origin === root.origin &&
-    (url.pathname === rootPath || url.pathname.startsWith(rootPath + '/'))
-  );
+/** One string per page: no fragment, no trailing slash, so ".../static/" and ".../static" match. */
+function canonical(url: URL): string {
+  url.hash = '';
+  url.pathname = url.pathname.replace(/\/$/, '') || '/';
+  return url.href;
+}
+
+/** The root path itself or a descendant of it — not merely a string prefix like `/static-archive`. */
+function isUnder(url: URL, root: URL): boolean {
+  return url.pathname === root.pathname || url.pathname.startsWith(root.pathname + '/');
 }

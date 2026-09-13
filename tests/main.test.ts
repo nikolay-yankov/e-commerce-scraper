@@ -22,14 +22,15 @@ const site: Record<string, string> = {
 };
 
 async function run(argv: string[], pages = site) {
+  const fetch = fakeFetch(pages);
   const stdout = capture();
   const stderr = capture();
   const code = await main(['--url', ROOT, ...argv], {
-    fetch: fakeFetch(pages),
+    fetch,
     stdout: stdout.stream,
     stderr: stderr.stream,
   });
-  return { code, stdout: stdout.text(), stderr: stderr.text() };
+  return { code, stdout: stdout.text(), stderr: stderr.text(), requests: fetch.calls };
 }
 
 describe('main', () => {
@@ -79,6 +80,20 @@ describe('main', () => {
     expect(last).toMatchObject({ level: 'info', msg: 'done', results: 2 });
   });
 
+  it('exits 1 and logs a fatal line when nothing can be scraped', async () => {
+    const { code, stdout, stderr } = await run([], { [ROOT]: links() });
+
+    expect(code).toBe(1);
+    expect(stdout).toBe('');
+    expect(stderr).toMatch(/error fatal reason="No products scraped/);
+  });
+
+  it('formats the fatal line as JSON too', async () => {
+    const { stderr } = await run(['--log-format', 'json'], { [ROOT]: links() });
+    const last = JSON.parse(stderr.trim().split('\n').at(-1)!);
+    expect(last).toMatchObject({ level: 'error', msg: 'fatal' });
+  });
+
   it('prints help and exits 0', async () => {
     const { code, stdout } = await run(['--help']);
     expect(code).toBe(0);
@@ -91,9 +106,19 @@ describe('main', () => {
     [['--max-pages', '1.5'], /--max-pages: /],
     [['--log-format', 'xml'], /--log-format: /],
     [['--url', 'not a url'], /--url: /],
-    [['--output', '/nonexistent-dir/out.json'], /ENOENT.*\/nonexistent-dir/],
     [['--bogus'], /Unknown option/],
+    [['--url', 'ftp://shop.test/'], /--url: /],
   ])('rejects invalid arguments %j before crawling', async (argv, message) => {
-    await expect(run(argv)).rejects.toThrow(message);
+    const fetch = fakeFetch(site);
+    await expect(main(argv, { fetch, stdout: capture().stream })).rejects.toThrow(message);
+    expect(fetch.calls).toEqual([]);
+  });
+
+  it('checks --output before making any request', async () => {
+    const fetch = fakeFetch(site);
+    await expect(
+      main(['--url', ROOT, '--output', '/nonexistent-dir/out.json'], { fetch }),
+    ).rejects.toThrow(/ENOENT/);
+    expect(fetch.calls).toEqual([]);
   });
 });
