@@ -154,8 +154,8 @@ Tests are in three layers:
 3. **E2E** — `tests/e2e.test.ts` hits the real site and validates the report shape. It is excluded
    from `npm test` and runs as a separate CI job so a network blip never blocks a pull request.
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and build on every pull request, plus the
-e2e smoke test and a Docker build on pushes to `main`. The workflow is read-only (`permissions:
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests, build and a Docker build on every pull
+request, plus the e2e smoke test on pushes to `main`. The workflow is read-only (`permissions:
 contents: read`) and cancels superseded runs.
 
 ## When things go wrong
