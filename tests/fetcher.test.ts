@@ -33,3 +33,26 @@ describe('createFetcher', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('onRetry', () => {
+  it('is called once per retry with the attempt number and cause', async () => {
+    vi.useFakeTimers();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(500))
+      .mockResolvedValueOnce(response(200, 'ok'));
+    const onRetry = vi.fn();
+
+    const promise = createFetcher({ fetch, onRetry })('https://x.test');
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledWith({
+      url: 'https://x.test',
+      attempt: 1,
+      error: expect.objectContaining({ message: 'HTTP 500 for https://x.test' }),
+    });
+    vi.useRealTimers();
+  });
+});

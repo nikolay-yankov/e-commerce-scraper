@@ -20,9 +20,10 @@ describe('scrape', () => {
       ),
     });
 
-    const { report, failures } = await scrape({ startUrl: ROOT, fetchText: site });
+    const { report, failures, stats } = await scrape({ startUrl: ROOT, fetchText: site });
 
     expect(failures).toEqual([]);
+    expect(stats).toMatchObject({ listingPages: 1, productPages: 2 });
     expect(report).toEqual({
       results: [
         { name: 'Laptop 128 GB', description: 'desc', price: 100.5 },

@@ -7,6 +7,8 @@ export interface FetcherOptions {
   timeoutMs?: number;
   retries?: number;
   userAgent?: string;
+  /** Called before each retry; lets the caller log or count them. */
+  onRetry?: (info: { url: string; attempt: number; error: unknown }) => void;
 }
 
 export type FetchText = (url: string) => Promise<string>;
@@ -23,12 +25,16 @@ export function createFetcher({
   timeoutMs = 10_000,
   retries = 3,
   userAgent = 'ecommerce-scraper/1.0 (+https://github.com/nikolay-yankov/e-commerce-scraper)',
+  onRetry = () => {},
 }: FetcherOptions = {}): FetchText {
   return async function fetchText(url) {
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
-      if (attempt > 0) await sleep(2 ** attempt * 250);
+      if (attempt > 0) {
+        onRetry({ url, attempt, error: lastError });
+        await sleep(2 ** attempt * 250);
+      }
       try {
         const res = await fetch(url, {
           headers: { 'user-agent': userAgent, accept: 'text/html' },
