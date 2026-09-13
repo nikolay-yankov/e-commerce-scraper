@@ -115,6 +115,13 @@ cli ─▶ crawler ─▶ parser ─▶ expand ─▶ report ─▶ stdout
   uses Node's built-in `util.parseArgs`. No crawler framework: Crawlee and friends earn their weight
   with request queues, proxy rotation and browser pools — none of which a 150-page static site needs.
 
+## Toolchain
+
+Node 24 LTS, TypeScript 6.0 targeting ES2025 (Node 24's V8 implements all of it, so nothing is
+downlevelled), ESLint 10, Vitest 5. TypeScript 7 (the native compiler) builds this project, but
+`typescript-eslint` does not support it yet, and a working lint step is worth more than the newer
+compiler — revisit when typescript-eslint ships 7.x support.
+
 ## Development
 
 ```bash

@@ -1,18 +1,22 @@
 {
   "compilerOptions": {
-    "target": "ES2023",
+    // Node 24 (V8 13.6) implements all of ES2025, so emit it as-is: no downlevelling.
+    "target": "ES2025",
+    "lib": ["ES2025"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2023"],
     "types": ["node"],
+
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
+    // Explicit `import type`; keeps the code correct for single-file transpilers (tsx, vitest).
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
     "outDir": "dist",
     "rootDir": "src",
     "sourceMap": true,
-    "declaration": false
+    "skipLibCheck": true
   },
   "include": ["src"]
 }
