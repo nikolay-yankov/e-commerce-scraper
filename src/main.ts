@@ -2,6 +2,7 @@ import { access, constants, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { Writable } from 'node:stream';
 import { parseArgs } from 'node:util';
+import { z } from 'zod';
 import { createFetcher, type FetchFn } from './fetcher.js';
 import { createLogger } from './logger.js';
 import { scrape } from './scrape.js';
@@ -28,6 +29,19 @@ Exit codes: 0 success, 1 fatal error, 2 completed with some product pages failed
             130/143 stopped by SIGINT/SIGTERM.
 `;
 
+/** parseArgs only knows strings and booleans; zod turns them into validated, typed options. */
+const OptionsSchema = z.object({
+  url: z.url(),
+  concurrency: z.coerce.number().int().min(1),
+  delay: z.coerce.number().int().min(0),
+  'max-pages': z.coerce.number().int().min(1),
+  'log-format': z.enum(['text', 'json']),
+  output: z.string().optional(),
+  verbose: z.boolean(),
+  quiet: z.boolean(),
+  help: z.boolean(),
+});
+
 /** Process-level dependencies, injectable so the CLI can be tested without a network or TTY. */
 export interface MainIO {
   fetch?: FetchFn;
@@ -49,7 +63,7 @@ export async function main(
   argv: string[],
   { fetch = globalThis.fetch, stdout = process.stdout, stderr = process.stderr }: MainIO = {},
 ): Promise<number> {
-  const { values } = parseArgs({
+  const { values: raw } = parseArgs({
     args: argv,
     options: {
       url: { type: 'string', short: 'u', default: DEFAULT_URL },
@@ -64,31 +78,30 @@ export async function main(
     },
   });
 
-  if (values.help) {
+  if (raw.help) {
     stdout.write(HELP);
     return 0;
   }
 
-  const concurrency = positiveInt('--concurrency', values.concurrency);
-  const delayMs = nonNegativeInt('--delay', values.delay);
-  const maxPages = positiveInt('--max-pages', values['max-pages']);
-  const format = values['log-format'];
-  if (format !== 'text' && format !== 'json') {
-    throw new Error(`--log-format must be "text" or "json", got "${format}"`);
+  const parsed = OptionsSchema.safeParse(raw);
+  if (!parsed.success) {
+    const problems = parsed.error.issues.map((i) => `--${i.path.join('.')}: ${i.message}`);
+    throw new Error(`Invalid options\n  ${problems.join('\n  ')}`);
   }
-  // Fail before crawling, not after, if the output can't be written.
-  if (values.output) await assertWritable(values.output);
+  const values = parsed.data;
+  // Fail before crawling, not after, if the output directory isn't writable.
+  if (values.output) await access(dirname(resolve(values.output)), constants.W_OK);
 
   const logger = createLogger({
     level: values.verbose ? 'debug' : values.quiet ? 'warn' : 'info',
-    format,
+    format: values['log-format'],
     write: (line) => stderr.write(line + '\n'),
   });
 
   let retries = 0;
   const fetchText = createFetcher({
     fetch,
-    delayMs,
+    delayMs: values.delay,
     onRetry: ({ url, attempt, error }) => {
       retries++;
       logger.warn('retrying', { url, attempt, reason: errorMessage(error) });
@@ -106,10 +119,10 @@ export async function main(
     const { report, failures, stats } = await scrape({
       startUrl: values.url,
       fetchText,
-      concurrency,
+      concurrency: values.concurrency,
       logger,
       signal: shutdown.signal,
-      maxPages,
+      maxPages: values['max-pages'],
     });
 
     const json = JSON.stringify(report, null, 2) + '\n';
@@ -137,29 +150,4 @@ export async function main(
 export function errorMessage(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   return err.cause === undefined ? err.message : `${err.message}: ${errorMessage(err.cause)}`;
-}
-
-/** The file must be writable if it exists, otherwise its directory must be. */
-async function assertWritable(file: string): Promise<void> {
-  const target = await access(file, constants.W_OK).then(
-    () => file,
-    () => dirname(resolve(file)),
-  );
-  await access(target, constants.W_OK).catch(() => {
-    throw new Error(`Cannot write to ${target} (for --output ${file})`);
-  });
-}
-
-function nonNegativeInt(flag: string, raw: string): number {
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 0) {
-    throw new Error(`${flag} must be a non-negative integer, got "${raw}"`);
-  }
-  return n;
-}
-
-function positiveInt(flag: string, raw: string): number {
-  const n = nonNegativeInt(flag, raw);
-  if (n === 0) throw new Error(`${flag} must be at least 1`);
-  return n;
 }

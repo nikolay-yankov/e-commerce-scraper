@@ -94,10 +94,12 @@ describe('main', () => {
   });
 
   it.each([
-    [['--concurrency', '0'], /--concurrency must be at least 1/],
-    [['--delay', 'abc'], /--delay must be a non-negative integer/],
-    [['--log-format', 'xml'], /--log-format must be "text" or "json"/],
-    [['--output', '/nonexistent-dir/out.json'], /Cannot write to \/nonexistent-dir/],
+    [['--concurrency', '0'], /--concurrency: /],
+    [['--delay', 'abc'], /--delay: /],
+    [['--max-pages', '1.5'], /--max-pages: /],
+    [['--log-format', 'xml'], /--log-format: /],
+    [['--url', 'not a url'], /--url: /],
+    [['--output', '/nonexistent-dir/out.json'], /ENOENT.*\/nonexistent-dir/],
     [['--bogus'], /Unknown option/],
   ])('rejects invalid arguments %j before crawling', async (argv, message) => {
     await expect(run(argv)).rejects.toThrow(message);
