@@ -25,7 +25,7 @@ report of all products, with each storage (HDD) option expanded into its own ent
 
 ## Quick start
 
-Requires Node.js 24 (LTS). No browser or system dependencies.
+Prerequisites: either Node.js 24 (LTS) or Docker — nothing else. No browser or system dependencies.
 
 ```bash
 npm ci
@@ -225,6 +225,18 @@ selectors live in one file with fixture-based tests.
   former, and that is what is implemented. Changing it is a one-line edit in `src/report.ts`.
 - Prices do not vary by HDD option on the static site, so every variant carries the page price.
 - Variant names follow the brief's example: `"<name> <size> GB"`.
+
+## How it went
+
+Timer running, built with Claude Code as a pair. About 1h50 in total.
+
+- **0:00 – 0:20** — Plan: what to build, features, technologies.
+- **0:20 – 0:30** — First working version, running as a Docker container.
+- **0:30 – 0:55** — Improvements to code, features, checks.
+- **0:55 – 1:05** — A separate Claude session with fresh context reviewed the code against the
+  requirements while I reviewed it myself. Its findings were fixed, each with a test.
+- **1:05 – 1:30** — Polishing.
+- **1:30 – 1:50** — Second review pass by the reviewer session, remaining findings fixed, done.
 
 ## Deliberately not built
 
