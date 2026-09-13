@@ -38,10 +38,11 @@ Or with Docker:
 
 ```bash
 docker build -t ecommerce-scraper .
-docker run --rm ecommerce-scraper > output.json
+docker run --rm --name ecommerce-scraper ecommerce-scraper > output.json
 ```
 
-The image runs as a non-root user, so to write with `-o` mount a directory:
+`--name` is optional but makes `docker logs` / `docker stop ecommerce-scraper` predictable. The
+image runs as a non-root user, so to write with `-o` mount a directory:
 `docker run --rm -v "$PWD:/out" ecommerce-scraper -o /out/output.json`.
 
 ### Options

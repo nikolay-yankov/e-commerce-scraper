@@ -9,6 +9,10 @@ RUN npm run build
 
 # --- runtime stage: production deps only, non-root user ---
 FROM node:24.11-alpine
+LABEL org.opencontainers.image.title="ecommerce-scraper" \
+      org.opencontainers.image.description="Scrapes webscraper.io's static e-commerce test site into a JSON report" \
+      org.opencontainers.image.source="https://github.com/nikolay-yankov/e-commerce-scraper" \
+      org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
