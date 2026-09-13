@@ -179,7 +179,8 @@ Tests are in three layers:
    from `npm test` and runs as a separate CI job so a network blip never blocks a pull request.
 
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests, build and a Docker build on every pull
-request, plus the e2e smoke test on pushes to `main`. The workflow is read-only (`permissions:
+request, plus the live e2e smoke test on pushes to `main` and on a daily schedule — the site's
+markup changing while nobody is pushing is exactly the failure the unit tests cannot catch. The workflow is read-only (`permissions:
 contents: read`) and cancels superseded runs.
 
 ### Try to break it

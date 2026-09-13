@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 6 * * *' # daily: catches the site's markup changing while nobody is pushing
 
 permissions:
   contents: read
@@ -27,11 +29,12 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # Live smoke test against the real site. Separate job so a flaky network never blocks a PR.
+  # Live smoke test against the real site: on merges and on the nightly schedule, never on PRs,
+  # so a flaky network or a third-party outage cannot block a code review.
   e2e:
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
