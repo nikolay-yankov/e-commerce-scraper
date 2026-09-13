@@ -66,3 +66,18 @@ describe('scrape abort', () => {
     );
   });
 });
+
+describe('scrape maxPages', () => {
+  it('fails before fetching products when listing + product pages exceed the budget', async () => {
+    const site = fakeSite({
+      [ROOT]: links('/static/product/1', '/static/product/2'),
+      [`${ROOT}/product/1`]: productHtml('A', '$1'),
+      [`${ROOT}/product/2`]: productHtml('B', '$1'),
+    });
+
+    await expect(scrape({ startUrl: ROOT, fetchText: site, maxPages: 2 })).rejects.toThrow(
+      /3 pages, over the limit of 2/,
+    );
+    expect(site.calls).toEqual([ROOT]);
+  });
+});

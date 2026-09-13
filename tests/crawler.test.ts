@@ -38,3 +38,18 @@ describe('extractLinks', () => {
     ]);
   });
 });
+
+describe('maxPages', () => {
+  it('aborts before fetching a level that would exceed the budget', async () => {
+    const site = fakeSite({
+      [ROOT]: links('/static/a', '/static/b'),
+      [`${ROOT}/a`]: links(),
+      [`${ROOT}/b`]: links(),
+    });
+
+    await expect(
+      discoverProductUrls({ startUrl: ROOT, fetchText: site, maxPages: 2 }),
+    ).rejects.toThrow(/exceed 2 listing pages/);
+    expect(site.calls).toEqual([ROOT]);
+  });
+});

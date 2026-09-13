@@ -6,6 +6,8 @@ export interface CrawlOptions {
   fetchText: FetchText;
   concurrency?: number;
   signal?: AbortSignal | undefined;
+  /** Safety valve: abort rather than fetch more listing pages than this. */
+  maxPages?: number;
   /** Called for every listing page fetched; useful for progress logging. */
   onPage?: (url: string) => void;
 }
@@ -24,6 +26,7 @@ export async function discoverProductUrls({
   fetchText,
   concurrency = 5,
   signal,
+  maxPages = Infinity,
   onPage,
 }: CrawlOptions & { startUrl: string }): Promise<string[]> {
   const root = new URL(startUrl);
@@ -33,6 +36,9 @@ export async function discoverProductUrls({
   let frontier = [root.href];
 
   while (frontier.length > 0) {
+    if (visited.size > maxPages) {
+      throw new Error(`Crawl would exceed ${maxPages} listing pages (see --max-pages)`);
+    }
     const pages = await Promise.all(
       frontier.map((url) =>
         limit(async () => {

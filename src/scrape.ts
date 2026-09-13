@@ -14,6 +14,8 @@ export interface ScrapeOptions {
   logger?: Logger;
   /** Aborting cancels in-flight requests and rejects the scrape; nothing partial is returned. */
   signal?: AbortSignal;
+  /** Upper bound on pages fetched (listing + product). Exceeding it is a fatal error. */
+  maxPages?: number;
 }
 
 export interface ScrapeResult {
@@ -30,6 +32,7 @@ export async function scrape({
   concurrency = 5,
   logger = silentLogger,
   signal,
+  maxPages = Infinity,
 }: ScrapeOptions): Promise<ScrapeResult> {
   const startedAt = performance.now();
   let listingPages = 0;
@@ -39,12 +42,18 @@ export async function scrape({
     fetchText,
     concurrency,
     signal,
+    maxPages,
     onPage: (url) => {
       listingPages++;
       logger.debug('listing page', { url });
     },
   });
   logger.info('discovery complete', { listingPages, productPages: productUrls.length });
+  if (listingPages + productUrls.length > maxPages) {
+    throw new Error(
+      `Crawl would fetch ${listingPages + productUrls.length} pages, over the limit of ${maxPages} (see --max-pages)`,
+    );
+  }
 
   const limit = pLimit(concurrency);
   const settled = await Promise.allSettled(

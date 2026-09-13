@@ -6,6 +6,8 @@ export interface FetcherOptions {
   fetch?: FetchFn;
   timeoutMs?: number;
   retries?: number;
+  /** Pause before every request. Combined with `concurrency`, this bounds the request rate. */
+  delayMs?: number;
   userAgent?: string;
   /** Called before each retry; lets the caller log or count them. */
   onRetry?: (info: { url: string; attempt: number; error: unknown }) => void;
@@ -25,6 +27,7 @@ export function createFetcher({
   fetch = globalThis.fetch,
   timeoutMs = 10_000,
   retries = 3,
+  delayMs = 0,
   userAgent = 'ecommerce-scraper/1.0 (+https://github.com/nikolay-yankov/e-commerce-scraper)',
   onRetry = () => {},
 }: FetcherOptions = {}): FetchText {
@@ -39,6 +42,8 @@ export function createFetcher({
           signal?.throwIfAborted(),
         );
       }
+      if (delayMs > 0)
+        await sleep(delayMs, undefined, { signal }).catch(() => signal?.throwIfAborted());
       try {
         const res = await fetch(url, {
           headers: { 'user-agent': userAgent, accept: 'text/html' },

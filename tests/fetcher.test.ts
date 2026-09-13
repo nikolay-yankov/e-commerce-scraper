@@ -81,3 +81,17 @@ describe('abort signal', () => {
     vi.useRealTimers();
   });
 });
+
+describe('delayMs', () => {
+  it('waits before every request', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn().mockResolvedValue(response(200, 'ok'));
+    const promise = createFetcher({ fetch, delayMs: 500 })('https://x.test');
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(fetch).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(promise).resolves.toBe('ok');
+    vi.useRealTimers();
+  });
+});

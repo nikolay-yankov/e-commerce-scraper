@@ -16,6 +16,8 @@ Options:
   -u, --url <url>          Start URL (default: ${DEFAULT_URL})
   -c, --concurrency <n>    Parallel requests (default: 5)
   -o, --output <file>      Write JSON to a file instead of stdout
+      --delay <ms>         Pause before every request (default: 0)
+      --max-pages <n>      Abort if the crawl would fetch more pages than this (default: 1000)
   -v, --verbose            Log every fetched page (debug level)
   -q, --quiet              Only log warnings and errors
       --log-format <fmt>   "text" (default) or "json" (one object per line)
@@ -31,6 +33,8 @@ export async function main(argv: string[]): Promise<number> {
       url: { type: 'string', short: 'u', default: DEFAULT_URL },
       concurrency: { type: 'string', short: 'c', default: '5' },
       output: { type: 'string', short: 'o' },
+      delay: { type: 'string', default: '0' },
+      'max-pages': { type: 'string', default: '1000' },
       verbose: { type: 'boolean', short: 'v', default: false },
       quiet: { type: 'boolean', short: 'q', default: false },
       'log-format': { type: 'string', default: 'text' },
@@ -44,6 +48,8 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const concurrency = positiveInt('--concurrency', values.concurrency);
+  const delayMs = nonNegativeInt('--delay', values.delay);
+  const maxPages = positiveInt('--max-pages', values['max-pages']);
   const format = values['log-format'];
   if (format !== 'text' && format !== 'json') {
     throw new Error(`--log-format must be "text" or "json", got "${format}"`);
@@ -64,6 +70,7 @@ export async function main(argv: string[]): Promise<number> {
 
   let retries = 0;
   const fetchText = createFetcher({
+    delayMs,
     onRetry: ({ url, attempt, error }) => {
       retries++;
       logger.warn('retrying', { url, attempt, reason: errorMessage(error) });
@@ -76,6 +83,7 @@ export async function main(argv: string[]): Promise<number> {
     concurrency,
     logger,
     signal: shutdown.signal,
+    maxPages,
   });
 
   const json = JSON.stringify(report, null, 2);
@@ -108,10 +116,17 @@ class ShutdownError extends Error {
   }
 }
 
-function positiveInt(flag: string, raw: string): number {
+function nonNegativeInt(flag: string, raw: string): number {
   const n = Number(raw);
-  if (!Number.isInteger(n) || n < 1)
-    throw new Error(`${flag} must be a positive integer, got "${raw}"`);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`${flag} must be a non-negative integer, got "${raw}"`);
+  }
+  return n;
+}
+
+function positiveInt(flag: string, raw: string): number {
+  const n = nonNegativeInt(flag, raw);
+  if (n === 0) throw new Error(`${flag} must be at least 1`);
   return n;
 }
 
