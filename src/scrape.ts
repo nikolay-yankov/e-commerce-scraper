@@ -12,6 +12,8 @@ export interface ScrapeOptions {
   fetchText: FetchText;
   concurrency?: number;
   logger?: Logger;
+  /** Aborting cancels in-flight requests and rejects the scrape; nothing partial is returned. */
+  signal?: AbortSignal;
 }
 
 export interface ScrapeResult {
@@ -27,6 +29,7 @@ export async function scrape({
   fetchText,
   concurrency = 5,
   logger = silentLogger,
+  signal,
 }: ScrapeOptions): Promise<ScrapeResult> {
   const startedAt = performance.now();
   let listingPages = 0;
@@ -35,6 +38,7 @@ export async function scrape({
     startUrl,
     fetchText,
     concurrency,
+    signal,
     onPage: (url) => {
       listingPages++;
       logger.debug('listing page', { url });
@@ -47,10 +51,13 @@ export async function scrape({
     productUrls.map((url) =>
       limit(async () => {
         logger.debug('product page', { url });
-        return expandVariants(parseProductPage(await fetchText(url)));
+        return expandVariants(parseProductPage(await fetchText(url, signal)));
       }),
     ),
   );
+
+  // An abort shows up as N rejected product fetches; surface it as the single cause it is.
+  signal?.throwIfAborted();
 
   const failures: ScrapeResult['failures'] = [];
   const products = settled.flatMap((result, i) => {

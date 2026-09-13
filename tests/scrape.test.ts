@@ -46,3 +46,23 @@ describe('scrape', () => {
     expect(failures.map((f) => f.url)).toEqual([`${ROOT}/product/2`]);
   });
 });
+
+describe('scrape abort', () => {
+  it('rejects with the abort reason instead of reporting every product as failed', async () => {
+    const controller = new AbortController();
+    const site = fakeSite({
+      [ROOT]: links('/static/product/1', '/static/product/2'),
+      [`${ROOT}/product/1`]: productHtml('A', '$1'),
+      [`${ROOT}/product/2`]: productHtml('B', '$1'),
+    });
+    const fetchText = async (url: string, signal?: AbortSignal) => {
+      if (url.endsWith('/product/1')) controller.abort(new Error('stop'));
+      signal?.throwIfAborted();
+      return site(url);
+    };
+
+    await expect(scrape({ startUrl: ROOT, fetchText, signal: controller.signal })).rejects.toThrow(
+      'stop',
+    );
+  });
+});

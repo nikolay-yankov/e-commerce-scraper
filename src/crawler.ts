@@ -5,6 +5,7 @@ import type { FetchText } from './fetcher.js';
 export interface CrawlOptions {
   fetchText: FetchText;
   concurrency?: number;
+  signal?: AbortSignal | undefined;
   /** Called for every listing page fetched; useful for progress logging. */
   onPage?: (url: string) => void;
 }
@@ -22,6 +23,7 @@ export async function discoverProductUrls({
   startUrl,
   fetchText,
   concurrency = 5,
+  signal,
   onPage,
 }: CrawlOptions & { startUrl: string }): Promise<string[]> {
   const root = new URL(startUrl);
@@ -35,7 +37,7 @@ export async function discoverProductUrls({
       frontier.map((url) =>
         limit(async () => {
           onPage?.(url);
-          return extractLinks(await fetchText(url), url);
+          return extractLinks(await fetchText(url, signal), url);
         }),
       ),
     );

@@ -54,6 +54,14 @@ export async function main(argv: string[]): Promise<number> {
     format: format as LogFormat,
   });
 
+  const shutdown = new AbortController();
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(sig, () => {
+      logger.warn('shutting down', { signal: sig });
+      shutdown.abort(new ShutdownError(sig));
+    });
+  }
+
   let retries = 0;
   const fetchText = createFetcher({
     onRetry: ({ url, attempt, error }) => {
@@ -67,6 +75,7 @@ export async function main(argv: string[]): Promise<number> {
     fetchText,
     concurrency,
     logger,
+    signal: shutdown.signal,
   });
 
   const json = JSON.stringify(report, null, 2);
@@ -90,6 +99,15 @@ export async function main(argv: string[]): Promise<number> {
   return failures.length > 0 ? 2 : 0;
 }
 
+/** Raised on SIGINT/SIGTERM; carries the conventional 128 + signal-number exit code. */
+class ShutdownError extends Error {
+  readonly exitCode: number;
+  constructor(signal: 'SIGINT' | 'SIGTERM') {
+    super(`received ${signal}`);
+    this.exitCode = signal === 'SIGINT' ? 130 : 143;
+  }
+}
+
 function positiveInt(flag: string, raw: string): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1)
@@ -107,5 +125,5 @@ main(process.argv.slice(2))
   })
   .catch((err: unknown) => {
     console.error(`fatal: ${errorMessage(err)}`);
-    process.exitCode = 1;
+    process.exitCode = err instanceof ShutdownError ? err.exitCode : 1;
   });

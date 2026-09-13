@@ -56,3 +56,28 @@ describe('onRetry', () => {
     vi.useRealTimers();
   });
 });
+
+describe('abort signal', () => {
+  it('rejects without fetching when already aborted', async () => {
+    const fetch = vi.fn();
+    const signal = AbortSignal.abort(new Error('stop'));
+    await expect(createFetcher({ fetch })('https://x.test', signal)).rejects.toThrow('stop');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not retry once aborted mid-backoff', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const fetch = vi.fn().mockResolvedValue(response(503));
+
+    const promise = createFetcher({ fetch })('https://x.test', controller.signal);
+    promise.catch(() => {});
+    await vi.advanceTimersByTimeAsync(10);
+    controller.abort(new Error('stop'));
+    await vi.runAllTimersAsync();
+
+    await expect(promise).rejects.toThrow('stop');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+});
