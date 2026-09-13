@@ -6,6 +6,8 @@ export interface FetcherOptions {
   fetch?: FetchFn;
   timeoutMs?: number;
   retries?: number;
+  /** Base for exponential backoff between retries: base × 2^attempt. */
+  backoffMs?: number;
   /** Pause before every request. Combined with `concurrency`, this bounds the request rate. */
   delayMs?: number;
   userAgent?: string;
@@ -27,6 +29,7 @@ export function createFetcher({
   fetch = globalThis.fetch,
   timeoutMs = 10_000,
   retries = 3,
+  backoffMs = 250,
   delayMs = 0,
   userAgent = 'ecommerce-scraper/1.0 (+https://github.com/nikolay-yankov/e-commerce-scraper)',
   onRetry = () => {},
@@ -38,7 +41,7 @@ export function createFetcher({
     while (attempts <= retries) {
       if (attempts > 0) {
         onRetry({ url, attempt: attempts, error: lastError });
-        await pause(backoffMs(attempts), signal);
+        await pause(backoffMs * 2 ** attempts, signal); // 500, 1000, 2000, …
       }
       await pause(delayMs, signal);
       attempts++;
@@ -62,8 +65,6 @@ export function createFetcher({
     throw new Error(`Failed to fetch ${url} after ${attempts} attempt(s)`, { cause: lastError });
   };
 }
-
-const backoffMs = (attempt: number) => 2 ** attempt * 250; // 500, 1000, 2000, …
 
 /** Sleeps for `ms`, but wakes up immediately (and throws the reason) if `signal` is aborted. */
 async function pause(ms: number, signal?: AbortSignal): Promise<void> {

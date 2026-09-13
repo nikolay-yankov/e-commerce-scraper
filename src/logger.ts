@@ -9,6 +9,13 @@ export interface Logger {
   error(msg: string, fields?: Fields): void;
 }
 
+export interface LoggerOptions {
+  level?: LogLevel;
+  format?: LogFormat;
+  /** Where lines go; defaults to stderr because stdout is reserved for the report. */
+  write?: (line: string) => void;
+}
+
 const SEVERITY: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
 /**
@@ -19,7 +26,7 @@ export function createLogger({
   level = 'info',
   format = 'text',
   write = (line: string) => process.stderr.write(line + '\n'),
-}: { level?: LogLevel; format?: LogFormat; write?: (line: string) => void } = {}): Logger {
+}: LoggerOptions = {}): Logger {
   const emit = (lvl: LogLevel, msg: string, fields?: Fields) => {
     if (SEVERITY[lvl] < SEVERITY[level]) return;
     write(

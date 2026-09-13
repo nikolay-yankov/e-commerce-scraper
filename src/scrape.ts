@@ -35,18 +35,14 @@ export async function scrape({
   maxPages = Infinity,
 }: ScrapeOptions): Promise<ScrapeResult> {
   const startedAt = performance.now();
-  let listingPages = 0;
 
-  const productUrls = await discoverProductUrls({
+  const { productUrls, listingPages } = await discoverProductUrls({
     startUrl,
     fetchText,
     concurrency,
     signal,
     maxPages,
-    onPage: (url) => {
-      listingPages++;
-      logger.debug('listing page', { url });
-    },
+    onPage: (url) => logger.debug('listing page', { url }),
   });
   logger.info('discovery complete', { listingPages, productPages: productUrls.length });
 

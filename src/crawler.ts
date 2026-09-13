@@ -13,6 +13,13 @@ export interface CrawlOptions {
   onPage?: (url: string) => void;
 }
 
+export interface CrawlResult {
+  /** Unique product URLs, sorted for deterministic output. */
+  productUrls: string[];
+  /** Listing pages fetched. */
+  listingPages: number;
+}
+
 const PRODUCT_PATH = /\/product\/\d+$/;
 
 /**
@@ -29,7 +36,7 @@ export async function discoverProductUrls({
   signal,
   maxPages = Infinity,
   onPage,
-}: CrawlOptions): Promise<string[]> {
+}: CrawlOptions): Promise<CrawlResult> {
   const root = new URL(startUrl);
   const limit = pLimit(concurrency);
   const visited = new Set<string>([root.href]);
@@ -62,7 +69,7 @@ export async function discoverProductUrls({
     }
   }
 
-  return [...products].sort();
+  return { productUrls: [...products].sort(), listingPages: visited.size };
 }
 
 /** Absolute, hash-free hrefs from every anchor on the page. Relative links are resolved. */
@@ -81,7 +88,12 @@ export function extractLinks(html: string, baseUrl: string): string[] {
   return [...links];
 }
 
+/** Same origin, and the path is the root path or a descendant of it (not merely a prefix match). */
 function isInScope(href: string, root: URL): boolean {
   const url = new URL(href);
-  return url.origin === root.origin && url.pathname.startsWith(root.pathname);
+  const rootPath = root.pathname.replace(/\/$/, '');
+  return (
+    url.origin === root.origin &&
+    (url.pathname === rootPath || url.pathname.startsWith(rootPath + '/'))
+  );
 }

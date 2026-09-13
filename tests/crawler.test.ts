@@ -7,7 +7,13 @@ const ROOT = 'https://shop.test/static';
 describe('discoverProductUrls', () => {
   it('follows categories and pagination, dedupes products, and ignores out-of-scope links', async () => {
     const site = fakeSite({
-      [ROOT]: links('/static/laptops', '/static/product/1', '/about', 'https://other.test/x'),
+      [ROOT]: links(
+        '/static/laptops',
+        '/static/product/1',
+        '/about',
+        '/static-archive/product/9',
+        'https://other.test/x',
+      ),
       [`${ROOT}/laptops`]: links(
         '/static/laptops?page=2',
         '/static/product/1',
@@ -16,9 +22,13 @@ describe('discoverProductUrls', () => {
       [`${ROOT}/laptops?page=2`]: links('/static/laptops', '/static/product/3#reviews'),
     });
 
-    const urls = await discoverProductUrls({ startUrl: ROOT, fetchText: site });
+    const { productUrls, listingPages } = await discoverProductUrls({
+      startUrl: ROOT,
+      fetchText: site,
+    });
 
-    expect(urls).toEqual([`${ROOT}/product/1`, `${ROOT}/product/2`, `${ROOT}/product/3`]);
+    expect(productUrls).toEqual([`${ROOT}/product/1`, `${ROOT}/product/2`, `${ROOT}/product/3`]);
+    expect(listingPages).toBe(3);
     expect(site.calls.sort()).toEqual([ROOT, `${ROOT}/laptops`, `${ROOT}/laptops?page=2`]);
   });
 

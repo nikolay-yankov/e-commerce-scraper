@@ -79,10 +79,31 @@ this is what `docker logs` shows. `--output` overwrites an existing file without
 
 ## How it works
 
+```mermaid
+flowchart LR
+  cli["cli.ts / main.ts<br/>options · logging · signals · exit codes"]
+  scrape["scrape.ts<br/>orchestration"]
+  crawler["crawler.ts<br/>BFS listing pages → product URLs"]
+  parser["parser.ts<br/>HTML → ProductPage"]
+  expand["expand.ts<br/>HDD options → Product[]"]
+  report["report.ts<br/>results + total"]
+  fetcher["fetcher.ts<br/>timeout · retry · delay · abort"]
+  site(("webscraper.io"))
+
+  cli --> scrape
+  scrape --> crawler --> parser --> expand --> report
+  crawler -. fetchText .-> fetcher
+  scrape -. fetchText .-> fetcher
+  fetcher <--> site
+  report --> cli
 ```
-cli ─▶ crawler ─▶ parser ─▶ expand ─▶ report ─▶ stdout
-          │           │
-          └───────────┴── fetcher (timeout · retries · concurrency cap)
+
+Data flows through three shapes, all defined in [`src/schema.ts`](src/schema.ts):
+
+```
+ProductPage  { name, description, price, hddOptions: string[], colors: string[] }   one per page
+   └─ expand ─▶ Product  { name, description, price, colors? }                       one per HDD option
+                   └─ report ─▶ Report  { results: Product[], total }                 the CLI's output
 ```
 
 | Module                             | Responsibility                                                                                                                                                                                      |
@@ -147,7 +168,7 @@ Tests are in three layers:
 
 1. **Unit** — parser, expand, report, logger and fetcher (retries, backoff, abort during fetch and
    during backoff, delay) against saved HTML fixtures in `tests/fixtures/` (a laptop with a disabled
-   HDD option, a phone with colours, a tablet with both) and fake timers.
+   HDD option, a phone with colours, a tablet with both).
 2. **Integration** — crawler, the full `scrape()` pipeline and the CLI's `main()` against an
    in-memory fake site that exercises categories, pagination, duplicates, out-of-scope links,
    failing pages, page budgets, argument validation and exit codes.
@@ -157,6 +178,25 @@ Tests are in three layers:
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests, build and a Docker build on every pull
 request, plus the e2e smoke test on pushes to `main`. The workflow is read-only (`permissions:
 contents: read`) and cancels superseded runs.
+
+### Try to break it
+
+Every test name is a sentence (`npx vitest run --reporter=verbose` lists all 49). For hands-on
+poking, these are the scenarios the tests encode, runnable against the built CLI:
+
+| Try                                                                               | Expect                                                                                                         |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `npm start -- \| head -3`                                                         | Three lines, exit 0 — closing the pipe early is not an error.                                                  |
+| `npm start -- --max-pages 5`                                                      | `fatal: Crawl would exceed 5 listing pages`, exit 1, no product fetched.                                       |
+| `npm start -- --url https://nonexistent.invalid/`                                 | Three `warn retrying … ENOTFOUND` lines, then fatal with the cause, exit 1.                                    |
+| `npm start -- --url https://webscraper.io/test-sites/e-commerce/static/product/1` | `No products scraped (0 page(s) failed); has the site changed?`, exit 1 — a product page has no product links. |
+| `npm start -- -c 0 --delay abc --log-format xml`                                  | All three problems listed in one error, exit 1.                                                                |
+| `npm start -- -o /nonexistent/out.json`                                           | `ENOENT` before any request is made.                                                                           |
+| `npm start -- --url .../static/` (trailing slash)                                 | Same 423 results — scope handling is path-segment aware.                                                       |
+| Ctrl-C mid-run                                                                    | `warn shutting down signal=SIGINT`, exit 130, no partial output, no stray retry lines.                         |
+| `docker stop <container>`                                                         | Same via SIGTERM, exit 143, returns in well under a second.                                                    |
+| `npm start -- -c 20`                                                              | Same total; concurrency changes only speed.                                                                    |
+| `npm start -- --log-format json -q 2>&1 >/dev/null`                               | Nothing — quiet suppresses `info`; add a bad `--url` to see a JSON error line.                                 |
 
 ## When things go wrong
 

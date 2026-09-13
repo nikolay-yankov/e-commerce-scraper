@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createFetcher } from '../src/fetcher.js';
+import { createFetcher, type FetcherOptions } from '../src/fetcher.js';
+
+/** Real timers, but no real waiting: fake-timer libraries cannot intercept node:timers/promises. */
+const fetcher = (options: FetcherOptions) => createFetcher({ backoffMs: 1, ...options });
 
 const response = (status: number, body = '') =>
   new Response(body, { status, headers: { 'content-type': 'text/html' } });
@@ -7,29 +10,24 @@ const response = (status: number, body = '') =>
 describe('createFetcher', () => {
   it('returns the body on success', async () => {
     const fetch = vi.fn().mockResolvedValue(response(200, '<html/>'));
-    await expect(createFetcher({ fetch })('https://x.test')).resolves.toBe('<html/>');
+    await expect(fetcher({ fetch })('https://x.test')).resolves.toBe('<html/>');
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('retries on 503 and network errors, then succeeds', async () => {
-    vi.useFakeTimers();
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(response(503))
       .mockRejectedValueOnce(new Error('ECONNRESET'))
       .mockResolvedValueOnce(response(200, 'ok'));
 
-    const promise = createFetcher({ fetch, retries: 3 })('https://x.test');
-    await vi.runAllTimersAsync();
-
-    await expect(promise).resolves.toBe('ok');
+    await expect(fetcher({ fetch, retries: 3 })('https://x.test')).resolves.toBe('ok');
     expect(fetch).toHaveBeenCalledTimes(3);
-    vi.useRealTimers();
   });
 
   it('does not retry on 404 and reports the real attempt count and cause', async () => {
     const fetch = vi.fn().mockResolvedValue(response(404));
-    const promise = createFetcher({ fetch })('https://x.test');
+    const promise = fetcher({ fetch })('https://x.test');
 
     await expect(promise).rejects.toThrow('Failed to fetch https://x.test after 1 attempt(s)');
     await expect(promise).rejects.toMatchObject({
@@ -41,16 +39,13 @@ describe('createFetcher', () => {
 
 describe('onRetry', () => {
   it('is called once per retry with the attempt number and cause', async () => {
-    vi.useFakeTimers();
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(response(500))
       .mockResolvedValueOnce(response(200, 'ok'));
     const onRetry = vi.fn();
 
-    const promise = createFetcher({ fetch, onRetry })('https://x.test');
-    await vi.runAllTimersAsync();
-    await promise;
+    await fetcher({ fetch, onRetry })('https://x.test');
 
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onRetry).toHaveBeenCalledWith({
@@ -58,7 +53,6 @@ describe('onRetry', () => {
       attempt: 1,
       error: expect.objectContaining({ message: 'HTTP 500 for https://x.test' }),
     });
-    vi.useRealTimers();
   });
 });
 
@@ -66,7 +60,7 @@ describe('abort signal', () => {
   it('rejects without fetching when already aborted', async () => {
     const fetch = vi.fn();
     const signal = AbortSignal.abort(new Error('stop'));
-    await expect(createFetcher({ fetch })('https://x.test', signal)).rejects.toThrow('stop');
+    await expect(fetcher({ fetch })('https://x.test', signal)).rejects.toThrow('stop');
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -81,7 +75,7 @@ describe('abort signal', () => {
         }),
     );
 
-    const promise = createFetcher({ fetch, onRetry })('https://x.test', controller.signal);
+    const promise = fetcher({ fetch, onRetry })('https://x.test', controller.signal);
     await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
     controller.abort(new Error('stop'));
 
@@ -91,32 +85,27 @@ describe('abort signal', () => {
   });
 
   it('does not retry once aborted mid-backoff', async () => {
-    vi.useFakeTimers();
     const controller = new AbortController();
     const fetch = vi.fn().mockResolvedValue(response(503));
 
-    const promise = createFetcher({ fetch })('https://x.test', controller.signal);
-    promise.catch(() => {});
-    await vi.advanceTimersByTimeAsync(10);
+    // A long backoff so the abort is guaranteed to land inside it.
+    const promise = fetcher({ fetch, backoffMs: 10_000 })('https://x.test', controller.signal);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     controller.abort(new Error('stop'));
-    await vi.runAllTimersAsync();
 
     await expect(promise).rejects.toThrow('stop');
     expect(fetch).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
   });
 });
 
 describe('delayMs', () => {
   it('waits before every request', async () => {
-    vi.useFakeTimers();
     const fetch = vi.fn().mockResolvedValue(response(200, 'ok'));
-    const promise = createFetcher({ fetch, delayMs: 500 })('https://x.test');
+    const started = performance.now();
 
-    await vi.advanceTimersByTimeAsync(499);
-    expect(fetch).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    await expect(promise).resolves.toBe('ok');
-    vi.useRealTimers();
+    await fetcher({ fetch, delayMs: 30 })('https://x.test');
+
+    expect(performance.now() - started).toBeGreaterThanOrEqual(29);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
