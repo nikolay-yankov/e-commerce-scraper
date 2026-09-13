@@ -40,5 +40,5 @@ export const silentLogger: Logger = { debug() {}, info() {}, warn() {}, error() 
 
 const formatFields = (fields: Fields) =>
   Object.entries(fields)
-    .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    .map(([k, v]) => `${k}=${typeof v === 'string' && !/\s/.test(v) ? v : JSON.stringify(v)}`)
     .join(' ');

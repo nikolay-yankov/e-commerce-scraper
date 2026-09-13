@@ -33,13 +33,15 @@ export function createFetcher({
 }: FetcherOptions = {}): FetchText {
   return async function fetchText(url, signal) {
     let lastError: unknown;
+    let attempts = 0;
 
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      if (attempt > 0) {
-        onRetry({ url, attempt, error: lastError });
-        await pause(backoffMs(attempt), signal);
+    while (attempts <= retries) {
+      if (attempts > 0) {
+        onRetry({ url, attempt: attempts, error: lastError });
+        await pause(backoffMs(attempts), signal);
       }
       await pause(delayMs, signal);
+      attempts++;
 
       try {
         const res = await fetch(url, {
@@ -48,14 +50,16 @@ export function createFetcher({
         });
         if (res.ok) return await res.text();
 
+        await res.body?.cancel(); // release the connection; we only care about the status
         lastError = new Error(`HTTP ${res.status} for ${url}`);
         if (!RETRYABLE_STATUS.has(res.status)) break;
       } catch (err) {
-        lastError = err; // network error or timeout: always worth a retry
+        if (signal?.aborted) throw signal.reason; // caller cancelled: not a network error
+        lastError = err; // network error or timeout: worth a retry
       }
     }
 
-    throw new Error(`Failed to fetch ${url} after ${retries + 1} attempt(s)`, { cause: lastError });
+    throw new Error(`Failed to fetch ${url} after ${attempts} attempt(s)`, { cause: lastError });
   };
 }
 

@@ -13,10 +13,8 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
 
-    "outDir": "dist",
-    "rootDir": "src",
-    "sourceMap": true,
     "skipLibCheck": true
   },
-  "include": ["src"]
+  // Type-checks tests too; tsconfig.build.json narrows to src/ for emit.
+  "include": ["src", "tests", "vitest.config.ts"]
 }

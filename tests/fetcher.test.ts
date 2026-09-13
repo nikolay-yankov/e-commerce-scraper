@@ -27,9 +27,14 @@ describe('createFetcher', () => {
     vi.useRealTimers();
   });
 
-  it('does not retry on 404', async () => {
+  it('does not retry on 404 and reports the real attempt count and cause', async () => {
     const fetch = vi.fn().mockResolvedValue(response(404));
-    await expect(createFetcher({ fetch })('https://x.test')).rejects.toThrow(/Failed to fetch/);
+    const promise = createFetcher({ fetch })('https://x.test');
+
+    await expect(promise).rejects.toThrow('Failed to fetch https://x.test after 1 attempt(s)');
+    await expect(promise).rejects.toMatchObject({
+      cause: expect.objectContaining({ message: 'HTTP 404 for https://x.test' }),
+    });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
@@ -63,6 +68,26 @@ describe('abort signal', () => {
     const signal = AbortSignal.abort(new Error('stop'));
     await expect(createFetcher({ fetch })('https://x.test', signal)).rejects.toThrow('stop');
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects with the abort reason when aborted during an in-flight request, without retrying', async () => {
+    const controller = new AbortController();
+    const onRetry = vi.fn();
+    // A fetch that never resolves on its own, only via the signal — like a stalled connection.
+    const fetch = vi.fn(
+      (_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+        }),
+    );
+
+    const promise = createFetcher({ fetch, onRetry })('https://x.test', controller.signal);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+    controller.abort(new Error('stop'));
+
+    await expect(promise).rejects.toThrow('stop');
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry once aborted mid-backoff', async () => {

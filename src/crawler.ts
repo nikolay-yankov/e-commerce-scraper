@@ -74,7 +74,7 @@ export function extractLinks(html: string, baseUrl: string): string[] {
       url.hash = '';
       links.add(url.href);
     } catch {
-      // Malformed href (e.g. "javascript:void(0)") — ignore.
+      // Not a valid URL at all — ignore. (Off-site links parse fine; isInScope drops them.)
     }
   });
   return [...links];

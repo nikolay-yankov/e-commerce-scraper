@@ -29,7 +29,7 @@ export function parseProductPage(html: string): ProductPage {
   });
 }
 
-/** "$1,178.19" -> 1178.19. Throws on anything that isn't a price. */
+/** "$1,178.19" -> 1178.19. Keeps digits and the decimal point; throws if nothing numeric is left. */
 export function parsePrice(text: string): number {
   const cleaned = text.replace(/[^0-9.]/g, '');
   const value = Number(cleaned);

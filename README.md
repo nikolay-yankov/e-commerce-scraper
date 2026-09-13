@@ -61,11 +61,21 @@ The image runs as a non-root user, so to write with `-o` mount a directory:
 Exit codes: `0` success · `1` fatal error · `2` finished, but some product pages failed (they are
 listed on stderr; the report contains the rest) · `130`/`143` stopped by SIGINT/SIGTERM.
 
-A run ends with a summary line you can alert on:
+### Reading the logs
+
+Logs go to stderr; the report goes to stdout. By default a run prints two lines — discovery and a
+final summary you can alert on:
 
 ```
+info  discovery complete listingPages=32 productPages=147
 info  done listingPages=32 productPages=147 durationMs=1338 results=423 total=337421.52 failures=0 retries=0
 ```
+
+Anything unusual appears between them with its cause, e.g.
+`warn  retrying url=… attempt=2 reason="fetch failed: getaddrinfo ENOTFOUND …"` or
+`error product page failed url=… reason="… HTTP 404 …"`. `--verbose` adds one line per fetched
+page; `--log-format json` emits one JSON object per line for a log aggregator; in Docker, all of
+this is what `docker logs` shows. `--output` overwrites an existing file without asking.
 
 ## How it works
 
@@ -96,7 +106,8 @@ cli ─▶ crawler ─▶ parser ─▶ expand ─▶ report ─▶ stdout
   inheritance or mocks of global state.
 - **Generic crawl rather than a hard-coded path.** The crawler discovers `computers/laptops?page=17`
   the same way it discovers the home page, so a new category on the site needs no code change.
-  The `visited` set matters: featured products on landing pages duplicate catalogue entries.
+  Product URLs are collected into a set because featured products on landing pages duplicate
+  catalogue entries; each listing URL is fetched exactly once.
 - **Disabled options are not "available".** HDD swatches marked `disabled` (e.g. 1024 GB) are
   skipped, per the requirement to collect _available_ products.
 - **Partial failure is a first-class outcome.** One dead product page shouldn't lose the other 146.
@@ -129,20 +140,23 @@ npm run dev            # run from source via tsx
 npm test               # unit + integration tests (hermetic, no network)
 npm run test:e2e       # live smoke test against the real site
 npm run lint           # eslint + prettier
-npm run typecheck
+npm run typecheck      # src and tests (tsconfig.build.json narrows emit to src)
 ```
 
 Tests are in three layers:
 
-1. **Unit** — parser, expand and report against saved HTML fixtures in `tests/fixtures/` (a laptop
-   with a disabled HDD option, a phone with colours, a tablet with both).
-2. **Integration** — crawler and the full `scrape()` pipeline against an in-memory fake site that
-   exercises categories, pagination, duplicates, out-of-scope links and a failing page.
+1. **Unit** — parser, expand, report, logger and fetcher (retries, backoff, abort during fetch and
+   during backoff, delay) against saved HTML fixtures in `tests/fixtures/` (a laptop with a disabled
+   HDD option, a phone with colours, a tablet with both) and fake timers.
+2. **Integration** — crawler, the full `scrape()` pipeline and the CLI's `main()` against an
+   in-memory fake site that exercises categories, pagination, duplicates, out-of-scope links,
+   failing pages, page budgets, argument validation and exit codes.
 3. **E2E** — `tests/e2e.test.ts` hits the real site and validates the report shape. It is excluded
    from `npm test` and runs as a separate CI job so a network blip never blocks a pull request.
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests, build, the e2e smoke test on pushes to
-`main`, and a Docker build.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and build on every pull request, plus the
+e2e smoke test and a Docker build on pushes to `main`. The workflow is read-only (`permissions:
+contents: read`) and cancels superseded runs.
 
 ## When things go wrong
 
