@@ -6,12 +6,8 @@ import type { Product, ProductPage } from './schema.js';
  * - `colors` is only emitted when there is a genuine choice (more than one colour).
  */
 export function expandVariants(page: ProductPage): Product[] {
-  const base: Product = {
-    name: page.name,
-    description: page.description,
-    price: page.price,
-    ...(page.colors.length > 1 && { colors: page.colors }),
-  };
+  const base: Product = { name: page.name, description: page.description, price: page.price };
+  if (page.colors.length > 1) base.colors = page.colors;
 
   if (page.hddOptions.length === 0) return [base];
 

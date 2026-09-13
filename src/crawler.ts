@@ -5,7 +5,7 @@ import type { FetchText } from './fetcher.js';
 export interface CrawlOptions {
   fetchText: FetchText;
   concurrency?: number;
-  signal?: AbortSignal | undefined;
+  signal?: AbortSignal;
   /** Safety valve: abort rather than fetch more listing pages than this. */
   maxPages?: number;
   /** Called for every listing page fetched; useful for progress logging. */
@@ -36,8 +36,9 @@ export async function discoverProductUrls({
   let frontier = [root.href];
 
   while (frontier.length > 0) {
+    // `visited` already includes this level's pages, so this fires before fetching them.
     if (visited.size > maxPages) {
-      throw new Error(`Crawl would exceed ${maxPages} listing pages (see --max-pages)`);
+      throw new Error(`Crawl would exceed ${maxPages} listing pages`);
     }
     const pages = await Promise.all(
       frontier.map((url) =>
@@ -69,7 +70,7 @@ export function extractLinks(html: string, baseUrl: string): string[] {
   const links = new Set<string>();
   $('a[href]').each((_, el) => {
     try {
-      const url = new URL($(el).attr('href')!, baseUrl);
+      const url = new URL(el.attribs['href'] ?? '', baseUrl);
       url.hash = '';
       links.add(url.href);
     } catch {

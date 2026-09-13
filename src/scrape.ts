@@ -5,7 +5,7 @@ import type { FetchText } from './fetcher.js';
 import { silentLogger, type Logger } from './logger.js';
 import { parseProductPage } from './parser.js';
 import { buildReport } from './report.js';
-import type { Report } from './schema.js';
+import type { Product, Report } from './schema.js';
 
 export interface ScrapeOptions {
   startUrl: string;
@@ -49,10 +49,10 @@ export async function scrape({
     },
   });
   logger.info('discovery complete', { listingPages, productPages: productUrls.length });
-  if (listingPages + productUrls.length > maxPages) {
-    throw new Error(
-      `Crawl would fetch ${listingPages + productUrls.length} pages, over the limit of ${maxPages} (see --max-pages)`,
-    );
+
+  const totalPages = listingPages + productUrls.length;
+  if (totalPages > maxPages) {
+    throw new Error(`Crawl would fetch ${totalPages} pages, over the limit of ${maxPages}`);
   }
 
   const limit = pLimit(concurrency);
@@ -68,12 +68,19 @@ export async function scrape({
   // An abort shows up as N rejected product fetches; surface it as the single cause it is.
   signal?.throwIfAborted();
 
+  const products: Product[] = [];
   const failures: ScrapeResult['failures'] = [];
-  const products = settled.flatMap((result, i) => {
-    if (result.status === 'fulfilled') return result.value;
-    failures.push({ url: productUrls[i]!, error: result.reason });
-    return [];
+  settled.forEach((result, i) => {
+    if (result.status === 'fulfilled') products.push(...result.value);
+    else failures.push({ url: productUrls[i]!, error: result.reason });
   });
+
+  // Every page failing is not a "partial success" — the site has almost certainly changed.
+  if (products.length === 0) {
+    throw new Error(
+      `No products scraped (${failures.length} page(s) failed); has the site changed?`,
+    );
+  }
 
   return {
     report: buildReport(products),

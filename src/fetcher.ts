@@ -35,30 +35,40 @@ export function createFetcher({
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
-      signal?.throwIfAborted();
       if (attempt > 0) {
         onRetry({ url, attempt, error: lastError });
-        await sleep(2 ** attempt * 250, undefined, { signal }).catch(() =>
-          signal?.throwIfAborted(),
-        );
+        await pause(backoffMs(attempt), signal);
       }
-      if (delayMs > 0)
-        await sleep(delayMs, undefined, { signal }).catch(() => signal?.throwIfAborted());
+      await pause(delayMs, signal);
+
       try {
         const res = await fetch(url, {
           headers: { 'user-agent': userAgent, accept: 'text/html' },
-          signal: signal
-            ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
-            : AbortSignal.timeout(timeoutMs),
+          signal: withTimeout(signal, timeoutMs),
         });
         if (res.ok) return await res.text();
+
         lastError = new Error(`HTTP ${res.status} for ${url}`);
         if (!RETRYABLE_STATUS.has(res.status)) break;
       } catch (err) {
-        lastError = err;
+        lastError = err; // network error or timeout: always worth a retry
       }
     }
 
     throw new Error(`Failed to fetch ${url} after ${retries + 1} attempt(s)`, { cause: lastError });
   };
+}
+
+const backoffMs = (attempt: number) => 2 ** attempt * 250; // 500, 1000, 2000, …
+
+/** Sleeps for `ms`, but wakes up immediately (and throws the reason) if `signal` is aborted. */
+async function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (ms > 0) await sleep(ms, undefined, { signal }).catch(() => signal?.throwIfAborted());
+}
+
+/** A signal that fires on caller abort *or* timeout, whichever comes first. */
+function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
+  const timeout = AbortSignal.timeout(ms);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }

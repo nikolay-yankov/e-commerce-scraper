@@ -81,3 +81,16 @@ describe('scrape maxPages', () => {
     expect(site.calls).toEqual([ROOT]);
   });
 });
+
+describe('scrape with nothing usable', () => {
+  it('fails instead of returning an empty report when every product page fails', async () => {
+    const site = fakeSite({
+      [ROOT]: links('/static/product/1', '/static/product/2'),
+      [`${ROOT}/product/1`]: '<html>layout changed</html>',
+    });
+
+    await expect(scrape({ startUrl: ROOT, fetchText: site })).rejects.toThrow(
+      /No products scraped \(2 page\(s\) failed\)/,
+    );
+  });
+});

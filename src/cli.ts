@@ -2,7 +2,7 @@
 import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { createFetcher } from './fetcher.js';
-import { createLogger, type LogFormat } from './logger.js';
+import { createLogger } from './logger.js';
 import { scrape } from './scrape.js';
 
 const DEFAULT_URL = 'https://webscraper.io/test-sites/e-commerce/static';
@@ -57,7 +57,7 @@ export async function main(argv: string[]): Promise<number> {
 
   const logger = createLogger({
     level: values.verbose ? 'debug' : values.quiet ? 'warn' : 'info',
-    format: format as LogFormat,
+    format,
   });
 
   const shutdown = new AbortController();
