@@ -1,5 +1,7 @@
 # E-Commerce Scraper
 
+[![CI](https://github.com/nikolay-yankov/e-commerce-scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/nikolay-yankov/e-commerce-scraper/actions/workflows/ci.yml)
+
 A small command-line application that crawls
 [webscraper.io's static e-commerce test site](https://webscraper.io/test-sites/e-commerce/static),
 follows every product link (categories, sub-categories, pagination) and prints a single JSON

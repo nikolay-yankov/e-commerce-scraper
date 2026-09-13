@@ -22,7 +22,7 @@ export function createFetcher({
   fetch = globalThis.fetch,
   timeoutMs = 10_000,
   retries = 3,
-  userAgent = 'ecommerce-scraper/1.0 (+https://github.com/)',
+  userAgent = 'ecommerce-scraper/1.0 (+https://github.com/nikolay-yankov/e-commerce-scraper)',
 }: FetcherOptions = {}): FetchText {
   return async function fetchText(url) {
     let lastError: unknown;
