@@ -4,17 +4,9 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { main } from '../src/main.js';
-import { links, productHtml } from './helpers.js';
+import { fakeFetch, links, productHtml } from './helpers.js';
 
 const ROOT = 'https://shop.test/static';
-
-/** A `fetch` serving an in-memory site; unknown URLs get a 404. */
-function fakeFetch(pages: Record<string, string>): typeof fetch {
-  return async (input) => {
-    const html = pages[String(input)];
-    return new Response(html ?? 'not found', { status: html === undefined ? 404 : 200 });
-  };
-}
 
 function capture() {
   const stream = new PassThrough();

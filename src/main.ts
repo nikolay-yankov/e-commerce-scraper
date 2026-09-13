@@ -9,7 +9,7 @@ import { scrape } from './scrape.js';
 
 const DEFAULT_URL = 'https://webscraper.io/test-sites/e-commerce/static';
 
-export const HELP = `Usage: ecommerce-scraper [options]
+const HELP = `Usage: ecommerce-scraper [options]
 
 Scrapes every product reachable from the start URL and prints a JSON report to stdout.
 Logs go to stderr, so the output can be piped safely.

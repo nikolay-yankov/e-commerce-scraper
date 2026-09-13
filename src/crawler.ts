@@ -3,6 +3,7 @@ import pLimit from 'p-limit';
 import type { FetchText } from './fetcher.js';
 
 export interface CrawlOptions {
+  startUrl: string;
   fetchText: FetchText;
   concurrency?: number;
   signal?: AbortSignal;
@@ -28,7 +29,7 @@ export async function discoverProductUrls({
   signal,
   maxPages = Infinity,
   onPage,
-}: CrawlOptions & { startUrl: string }): Promise<string[]> {
+}: CrawlOptions): Promise<string[]> {
   const root = new URL(startUrl);
   const limit = pLimit(concurrency);
   const visited = new Set<string>([root.href]);

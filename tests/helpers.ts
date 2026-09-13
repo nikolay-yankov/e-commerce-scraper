@@ -1,20 +1,33 @@
 import { readFileSync } from 'node:fs';
-import type { FetchText } from '../src/fetcher.js';
+import type { FetchFn, FetchText } from '../src/fetcher.js';
 
 export function fixture(name: string): string {
   return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 }
 
-/** A `fetchText` backed by an in-memory map of URL → HTML. Unknown URLs reject like a 404 would. */
-export function fakeSite(pages: Record<string, string>): FetchText & { calls: string[] } {
+type Pages = Record<string, string>;
+
+/** A `fetch` serving an in-memory map of URL → HTML. Unknown URLs get a 404. */
+export function fakeFetch(pages: Pages): FetchFn & { calls: string[] } {
   const calls: string[] = [];
-  const fetchText = async (url: string) => {
+  const fetch: FetchFn = async (input) => {
+    const url = String(input);
     calls.push(url);
     const html = pages[url];
-    if (html === undefined) throw new Error(`HTTP 404 for ${url}`);
-    return html;
+    return new Response(html ?? 'not found', { status: html === undefined ? 404 : 200 });
   };
-  return Object.assign(fetchText, { calls });
+  return Object.assign(fetch, { calls });
+}
+
+/** The same fake site one level up: a `fetchText` that rejects on 404 like the real one does. */
+export function fakeSite(pages: Pages): FetchText & { calls: string[] } {
+  const fetch = fakeFetch(pages);
+  const fetchText: FetchText = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    return res.text();
+  };
+  return Object.assign(fetchText, { calls: fetch.calls });
 }
 
 export const links = (...hrefs: string[]) =>
